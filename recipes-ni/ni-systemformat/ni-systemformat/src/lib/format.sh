@@ -43,6 +43,7 @@ fi
 
 export CONFIG_MOUNT_POINT="/etc/natinst/share"
 export ROOTFS_MOUNT_POINT="/mnt/userfs"
+NIAUTH_DB_PATH="$CONFIG_MOUNT_POINT/niauth"
 
 
 # ==============================================================================
@@ -253,13 +254,13 @@ function format_rootfs_or_userfs() {
 	_necessary_services_stop
 	# Save off the current network configuration.
 	netconfig_pre
-	trap "rm -f '$ACCTINFO_TMP/.shadow'; netconfig_post; _necessary_services_start" EXIT
+	trap "rm -rf '$ACCTINFO_TMP'; netconfig_post; _necessary_services_start" EXIT
 
 	# Do the actual format.
 	format_rootfs_or_userfs_nosvc || ret=$?
 
-	# Remove the shadow backup if it was not already restored by nosvc.
-	rm -f "$ACCTINFO_TMP/.shadow"
+	# Remove account information backups not already restored by nosvc.
+	rm -rf "$ACCTINFO_TMP"
 	# Restore the network configuration.
 	netconfig_post || { local rc=$?; (( ret )) || ret=$rc; }
 	# Restart services
@@ -295,13 +296,18 @@ function format_rootfs_or_userfs_nomount()
 # restores system configuration, if necessary.
 function format_rootfs_or_userfs_nosvc()
 {
-	# Backup the shared .shadow file when preserving network configuration.
+	# Backup shared account information when preserving network configuration.
 	local expire_root_password=no
 	case "$NETCFG_MODE" in
 		all|primary|bypass)
 			if [ -f "$CONFIG_MOUNT_POINT/.shadow" ]; then
 				mkdir -p "$ACCTINFO_TMP" &&
 					cp "$CONFIG_MOUNT_POINT/.shadow" "$ACCTINFO_TMP" ||
+					return $?
+			fi
+			if [ -d "$NIAUTH_DB_PATH" ]; then
+				mkdir -p "$ACCTINFO_TMP" &&
+					cp -a "$NIAUTH_DB_PATH" "$ACCTINFO_TMP" ||
 					return $?
 			fi
 			;;
@@ -343,17 +349,27 @@ function format_rootfs_or_userfs_nosvc()
 	if [ -f "$ACCTINFO_TMP/.shadow" -a ! -f "$CONFIG_MOUNT_POINT/.shadow" ] &&
 		   mountpoint -q "$CONFIG_MOUNT_POINT"
 	then
-		mv -f "$ACCTINFO_TMP/.shadow" "$CONFIG_MOUNT_POINT" &&
-			rmdir "$ACCTINFO_TMP"	|| { local rc=$?; (( ret )) || ret=$rc; }
+		mv -f "$ACCTINFO_TMP/.shadow" "$CONFIG_MOUNT_POINT" ||
+			{ local rc=$?; (( ret )) || ret=$rc; }
+	fi
+
+	# Move the NIAuth database back to the configfs.
+	if [ -d "$ACCTINFO_TMP/niauth" -a ! -e "$NIAUTH_DB_PATH" ] &&
+		   mountpoint -q "$CONFIG_MOUNT_POINT"
+	then
+		mv "$ACCTINFO_TMP/niauth" "$CONFIG_MOUNT_POINT" ||
+			{ local rc=$?; (( ret )) || ret=$rc; }
 	fi
 
 	# Expire the root password without invoking PAM or ni-acctsync, then remove
-	# the shared shadow file so it is not recreated on reboot.
+	# shared account information so it is not recreated on reboot.
 	if [ "$expire_root_password" = yes ]; then
 		chage --lastday 0 root ||
 			{ local rc=$?; (( ret )) || ret=$rc; }
 		if mountpoint -q "$CONFIG_MOUNT_POINT"; then
 			rm -f "$CONFIG_MOUNT_POINT/.shadow" ||
+				{ local rc=$?; (( ret )) || ret=$rc; }
+			rm -rf "$NIAUTH_DB_PATH" ||
 				{ local rc=$?; (( ret )) || ret=$rc; }
 		fi
 	fi
