@@ -43,7 +43,6 @@ fi
 
 export CONFIG_MOUNT_POINT="/etc/natinst/share"
 export ROOTFS_MOUNT_POINT="/mnt/userfs"
-NIAUTH_DB_PATH="$CONFIG_MOUNT_POINT/niauth"
 
 
 # ==============================================================================
@@ -305,9 +304,9 @@ function format_rootfs_or_userfs_nosvc()
 					cp "$CONFIG_MOUNT_POINT/.shadow" "$ACCTINFO_TMP" ||
 					return $?
 			fi
-			if [ -d "$NIAUTH_DB_PATH" ]; then
+			if [ -d "$CONFIG_MOUNT_POINT/niauth" ]; then
 				mkdir -p "$ACCTINFO_TMP" &&
-					cp -a "$NIAUTH_DB_PATH" "$ACCTINFO_TMP" ||
+					cp -a "$CONFIG_MOUNT_POINT/niauth" "$ACCTINFO_TMP" ||
 					return $?
 			fi
 			;;
@@ -354,7 +353,7 @@ function format_rootfs_or_userfs_nosvc()
 	fi
 
 	# Move the NIAuth database back to the configfs.
-	if [ -d "$ACCTINFO_TMP/niauth" -a ! -e "$NIAUTH_DB_PATH" ] &&
+	if [ -d "$ACCTINFO_TMP/niauth" -a ! -e "$CONFIG_MOUNT_POINT/niauth" ] &&
 		   mountpoint -q "$CONFIG_MOUNT_POINT"
 	then
 		mv "$ACCTINFO_TMP/niauth" "$CONFIG_MOUNT_POINT" ||
@@ -369,7 +368,7 @@ function format_rootfs_or_userfs_nosvc()
 		if mountpoint -q "$CONFIG_MOUNT_POINT"; then
 			rm -f "$CONFIG_MOUNT_POINT/.shadow" ||
 				{ local rc=$?; (( ret )) || ret=$rc; }
-			rm -rf "$NIAUTH_DB_PATH" ||
+			rm -rf "$CONFIG_MOUNT_POINT/niauth" ||
 				{ local rc=$?; (( ret )) || ret=$rc; }
 		fi
 	fi
