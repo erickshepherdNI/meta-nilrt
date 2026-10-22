@@ -31,6 +31,7 @@ RDEPENDS:${PN} = "\
 	ni-configpersistentlogs \
 	ni-locale-alias \
 	ni-modules-autoload \
+	ni-niauth-root-user \
 	ni-tracefs-utils \
 	nilrt-logging \
 	niwatchdogpet \
